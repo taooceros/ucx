@@ -13,6 +13,8 @@
 #include <uct/api/uct.h>
 #include <ucs/sys/topo/base/topo.h>
 
+#include <infiniband/verbs.h>
+
 #include <stdint.h>
 
 BEGIN_C_DECLS
@@ -1015,6 +1017,30 @@ ucs_status_t uct_md_mem_attach(uct_md_h md, const void *mkey_buffer,
                                uct_md_mem_attach_params_t *params,
                                uct_mem_h *memh_p);
 
+
+/**
+ * @ingroup UCT_MD
+ *
+ * @brief Modified version of @ref uct_md_mem_attach to support ibverbs pd.
+ *
+ * This routine attaches a local memory handle to a memory region
+ * registered by @ref uct_md_mem_reg and packed by
+ * @ref uct_md_mem_pack_v2 by a peer to allow performing local operations
+ * on a remote memory.
+ *
+ * @param [in]  md            Handle to memory domain.
+ * @param [in]  mkey_buffer   Buffer with a packed remote memory handle as
+ *                            returned from @ref uct_md_mkey_pack_v2.
+ * @param [in]  params        Attach parameters, see @ref
+ *                            uct_md_mem_attach_params_t.
+ * @param [out] memh_p        Memory handle attached to a remote memory.
+ *
+ * @return                    Error code.
+ */
+ucs_status_t uct_md_mem_attach_verbs(uct_md_h fake_md, struct ibv_pd *md,
+                                     const void *mkey_buffer,
+                                     uct_md_mem_attach_params_t *params,
+                                     struct ibv_mr **memh_p);
 
 /**
  * @ingroup UCT_RESOURCE

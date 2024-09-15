@@ -1116,6 +1116,11 @@ uct_ib_mlx5_devx_mem_attach(uct_md_h uct_md, const void *mkey_buffer,
                             uct_mem_h *memh_p);
 
 ucs_status_t
+uct_ib_mlx5_devx_mem_attach_ibverbs(struct ibv_pd *pd, const void *mkey_buffer,
+                                    uct_md_mem_attach_params_t *params,
+                                    struct ibv_mr **mr_p);
+
+ucs_status_t
 uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
                            void *address, size_t length,
                            const uct_md_mkey_pack_params_t *params,
@@ -1124,6 +1129,8 @@ uct_ib_mlx5_devx_mkey_pack(uct_md_h uct_md, uct_mem_h uct_memh,
 ucs_status_t uct_ib_mlx5_devx_md_open(struct ibv_device *ibv_device,
                                       const uct_ib_md_config_t *md_config,
                                       uct_ib_md_t **p_md);
+
+
 
 ucs_status_t uct_ib_mlx5_devx_reg_exported_key(uct_ib_mlx5_md_t *md,
                                                uct_ib_mlx5_devx_mem_t *memh);

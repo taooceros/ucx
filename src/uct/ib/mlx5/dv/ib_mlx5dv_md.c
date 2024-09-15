@@ -1130,6 +1130,22 @@ uct_ib_mlx5_devx_umr_mkey_alias_destroy(uct_ib_mlx5_md_t *md,
     }
 }
 
+static void uct_ib_mlx5_devx_umr_mkey_alias_destroy_ibverbs(
+    uct_ib_mlx5_devx_umr_alias_t *umr_alias) {
+  ucs_status_t status;
+
+  ucs_trace("%s: destroy " UCT_IB_MLX5_UMR_ALIAS_FMT, "ibverbs device",
+            UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias));
+
+  status = uct_ib_mlx5_devx_obj_destroy(umr_alias->cross_mr, "MKEY_ALIAS");
+  if (UCS_OK != status) {
+    ucs_warn("%s: uct_ib_mlx5_devx_obj_destroy(" UCT_IB_MLX5_UMR_ALIAS_FMT
+             ") failed with error '%s': %m",
+             "ibverbs device", UCT_IB_MLX5_UMR_ALIAS_ARG(umr_alias),
+             ucs_status_string(status));
+  }
+}
+
 static void
 uct_ib_mlx5_devx_umr_mkey_destroy(uct_ib_mlx5_md_t *md,
                                   uct_ib_mlx5_devx_umr_mkey_t *umr_mkey)
@@ -2465,6 +2481,22 @@ uint32_t uct_ib_mlx5_devx_md_get_pdn(uct_ib_mlx5_md_t *md)
     return dvpd.pdn;
 }
 
+uint32_t uct_ib_mlx5_devx_md_get_pdn_ibv(struct ibv_pd *pd) {
+  struct mlx5dv_pd dvpd = {0};
+  struct mlx5dv_obj dv = {{0}};
+  int ret;
+
+  /* obtain pdn */
+  dv.pd.in = pd;
+  dv.pd.out = &dvpd;
+  ret = mlx5dv_init_obj(&dv, MLX5DV_OBJ_PD);
+  if (ret) {
+    ucs_fatal("mlx5dv_init_obj(, PD) failed:");
+  }
+
+  return dvpd.pdn;
+}
+
 uint8_t
 uct_ib_mlx5_devx_md_get_counter_set_id(uct_ib_mlx5_md_t *md, uint8_t port_num)
 {
@@ -2952,6 +2984,92 @@ err_memh_free:
 err:
     return status;
 }
+
+ucs_status_t
+uct_ib_mlx5_devx_mem_attach_ibverbs(struct ibv_pd *pd, const void *mkey_buffer,
+                                    uct_md_mem_attach_params_t *params,
+                                    struct ibv_mr **mr_p) {
+  char in[UCT_IB_MLX5DV_ST_SZ_BYTES(create_alias_obj_in)] = {0};
+  char out[UCT_IB_MLX5DV_ST_SZ_BYTES(create_alias_obj_out)] = {0};
+  const uint64_t flags =
+      UCT_MD_MEM_ATTACH_FIELD_VALUE(params, flags, FIELD_FLAGS, 0);
+  const uct_ib_md_packed_mkey_t *packed_mkey = mkey_buffer;
+  uct_ib_mlx5_devx_umr_alias_t umr_alias = {};
+  struct ibv_mr *mr;
+  void *hdr, *alias_ctx;
+  ucs_status_t status;
+  void *access_key;
+  int ret;
+
+  ucs_log(UCS_LOG_LEVEL_INFO, "trying to attach to a ibverb pd");
+
+  mr = ucs_malloc(sizeof(struct ibv_mr), "ibv_mr");
+
+  hdr = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, hdr);
+  alias_ctx = UCT_IB_MLX5DV_ADDR_OF(create_alias_obj_in, in, alias_ctx);
+
+  /* create alias */
+  UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr, hdr, opcode,
+                    UCT_IB_MLX5_CMD_OP_CREATE_GENERAL_OBJECT);
+  UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr, hdr, obj_type,
+                    UCT_IB_MLX5_OBJ_TYPE_MKEY);
+  UCT_IB_MLX5DV_SET(general_obj_in_cmd_hdr, hdr, alias_object, 1);
+
+  UCT_IB_MLX5DV_SET(alias_context, alias_ctx, vhca_id_to_be_accessed,
+                    packed_mkey->vhca_id);
+  UCT_IB_MLX5DV_SET(alias_context, alias_ctx, object_id_to_be_accessed,
+                    uct_ib_mlx5_mkey_index(packed_mkey->lkey));
+  UCT_IB_MLX5DV_SET(alias_context, alias_ctx, metadata_1,
+                    uct_ib_mlx5_devx_md_get_pdn_ibv(pd));
+  access_key = UCT_IB_MLX5DV_ADDR_OF(alias_context, alias_ctx, access_key);
+  ucs_strncpy_zero(access_key, uct_ib_mkey_token,
+                   UCT_IB_MLX5DV_FLD_SZ_BYTES(alias_context, access_key));
+
+  umr_alias.cross_mr =
+      uct_ib_mlx5_devx_obj_create(pd->context, in, sizeof(in), out, sizeof(out),
+                                  "MKEY_ALIAS", uct_md_attach_log_lvl(flags));
+  if (umr_alias.cross_mr == NULL) {
+    status = UCS_ERR_IO_ERROR;
+    goto err_memh_free;
+  }
+
+  ret = UCT_IB_MLX5DV_GET(create_alias_obj_out, out, alias_ctx.status);
+  if (ret) {
+    uct_md_log_mem_attach_error(flags,
+                                "created MR alias object in a bad state");
+    status = UCS_ERR_IO_ERROR;
+    goto err_cross_mr_destroy;
+  }
+
+  // TODO: figure out mkey tag
+  mr->lkey = (UCT_IB_MLX5DV_GET(create_alias_obj_out, out, hdr.obj_id) << 8) |
+             0; // md.mkey_tag;
+
+  /* If received mkey is UMR key, store alias in the UMR hash map */
+  if (uct_ib_mlx5_devx_mkey_is_umr(packed_mkey->lkey)) {
+    umr_alias.lkey = mr->lkey;
+  } else {
+    /* Not UMR mkey: move cross_mr ownership to memh */
+    uct_md_log_mem_attach_error(flags, "imported memory is not UMR");
+    status = UCS_ERR_INVALID_PARAM;
+    goto err_cross_mr_destroy;
+    // memh->cross_mr = umr_alias.cross_mr;
+  }
+
+out:
+  mr->rkey = mr->lkey;
+
+  *mr_p = mr;
+  return UCS_OK;
+
+err_cross_mr_destroy:
+  uct_ib_mlx5_devx_umr_mkey_alias_destroy_ibverbs(&umr_alias);
+err_memh_free:
+//   ucs_free(memh);
+err:
+  return status;
+}
+
 
 ucs_status_t
 uct_ib_mlx5_devx_md_query(uct_md_h uct_md, uct_md_attr_v2_t *md_attr)
