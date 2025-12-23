@@ -1,63 +1,57 @@
 /**
-* Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS RESERVED.
-*
-* See file LICENSE for terms.
-*/
+ * Copyright (c) NVIDIA CORPORATION & AFFILIATES, 2001-2014. ALL RIGHTS
+ * RESERVED.
+ *
+ * See file LICENSE for terms.
+ */
 
 #ifndef UCT_MD_H_
 #define UCT_MD_H_
 
 #ifdef HAVE_CONFIG_H
-#  include "config.h"
+#include "config.h"
 #endif
 
 #include "uct_component.h"
 
-#include <uct/api/uct.h>
-#include <uct/api/v2/uct_v2.h>
+#include <string.h>
 #include <ucs/config/parser.h>
 #include <ucs/memory/rcache.h>
 #include <ucs/type/param.h>
-#include <string.h>
+#include <uct/api/uct.h>
+#include <uct/api/v2/uct_v2.h>
 
+#define uct_md_log_mem_reg_error(_flags, _fmt, ...)                            \
+  ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ##__VA_ARGS__)
 
-#define uct_md_log_mem_reg_error(_flags, _fmt, ...) \
-    ucs_log(uct_md_reg_log_lvl(_flags), _fmt, ## __VA_ARGS__)
+#define uct_md_log_mem_attach_error(_flags, _fmt, ...)                         \
+  ucs_log(uct_md_attach_log_lvl(_flags), _fmt, ##__VA_ARGS__)
 
+#define UCT_MD_MEM_REG_FIELD_VALUE(_params, _name, _flag, _default)            \
+  UCS_PARAM_VALUE(UCT_MD_MEM_REG, _params, _name, _flag, _default)
 
-#define uct_md_log_mem_attach_error(_flags, _fmt, ...) \
-    ucs_log(uct_md_attach_log_lvl(_flags), _fmt, ##__VA_ARGS__)
+#define UCT_MD_MEM_DEREG_FIELD_VALUE(_params, _name, _flag, _default)          \
+  UCS_PARAM_VALUE(UCT_MD_MEM_DEREG, _params, _name, _flag, _default)
 
+#define UCT_MD_MEM_ATTACH_FIELD_VALUE(_params, _name, _flag, _default)         \
+  UCS_PARAM_VALUE(UCT_MD_MEM_ATTACH, _params, _name, _flag, _default)
 
-#define UCT_MD_MEM_REG_FIELD_VALUE(_params, _name, _flag, _default) \
-    UCS_PARAM_VALUE(UCT_MD_MEM_REG, _params, _name, _flag, _default)
-
-
-#define UCT_MD_MEM_DEREG_FIELD_VALUE(_params, _name, _flag, _default) \
-    UCS_PARAM_VALUE(UCT_MD_MEM_DEREG, _params, _name, _flag, _default)
-
-
-#define UCT_MD_MEM_ATTACH_FIELD_VALUE(_params, _name, _flag, _default) \
-    UCS_PARAM_VALUE(UCT_MD_MEM_ATTACH, _params, _name, _flag, _default)
-
-
-#define UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, _invalidate_supported) \
-    if (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, memh, FIELD_MEMH, NULL) == NULL) { \
-        return UCS_ERR_INVALID_PARAM; \
-    } \
-    if (ENABLE_PARAMS_CHECK) { \
-        if (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, flags, FIELD_FLAGS, 0) & \
-            UCT_MD_MEM_DEREG_FLAG_INVALIDATE) { \
-            if (!(_invalidate_supported)) { \
-                return UCS_ERR_UNSUPPORTED; \
-            } \
-            if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, comp, FIELD_COMPLETION, \
-                                              NULL) == NULL) { \
-                return UCS_ERR_INVALID_PARAM; \
-            } \
-        } \
-    }
-
+#define UCT_MD_MEM_DEREG_CHECK_PARAMS(_params, _invalidate_supported)          \
+  if (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, memh, FIELD_MEMH, NULL) == NULL) { \
+    return UCS_ERR_INVALID_PARAM;                                              \
+  }                                                                            \
+  if (ENABLE_PARAMS_CHECK) {                                                   \
+    if (UCT_MD_MEM_DEREG_FIELD_VALUE(_params, flags, FIELD_FLAGS, 0) &         \
+        UCT_MD_MEM_DEREG_FLAG_INVALIDATE) {                                    \
+      if (!(_invalidate_supported)) {                                          \
+        return UCS_ERR_UNSUPPORTED;                                            \
+      }                                                                        \
+      if (UCT_MD_MEM_DEREG_FIELD_VALUE(params, comp, FIELD_COMPLETION,         \
+                                       NULL) == NULL) {                        \
+        return UCS_ERR_INVALID_PARAM;                                          \
+      }                                                                        \
+    }                                                                          \
+  }
 
 extern const char *uct_device_type_names[];
 
@@ -66,40 +60,31 @@ extern const char *uct_device_type_names[];
  * Specific MDs extend this structure.
  */
 struct uct_md_config {
-    /* C standard prohibits empty structures */
-    char                   __dummy;
+  /* C standard prohibits empty structures */
+  char __dummy;
 };
-
 
 typedef void (*uct_md_close_func_t)(uct_md_h md);
 
 typedef ucs_status_t (*uct_md_query_func_t)(uct_md_h md,
                                             uct_md_attr_v2_t *md_attr_v2);
 
-typedef ucs_status_t (*uct_md_mem_alloc_func_t)(uct_md_h md,
-                                                size_t *length_p,
-                                                void **address_p,
-                                                ucs_memory_type_t mem_type,
-                                                unsigned flags,
-                                                const char *alloc_name,
-                                                uct_mem_h *memh_p);
+typedef ucs_status_t (*uct_md_mem_alloc_func_t)(
+    uct_md_h md, size_t *length_p, void **address_p, ucs_memory_type_t mem_type,
+    unsigned flags, const char *alloc_name, uct_mem_h *memh_p);
 
 typedef ucs_status_t (*uct_md_mem_free_func_t)(uct_md_h md, uct_mem_h memh);
 
-typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md,
-                                                 uct_mem_h memh,
-                                                 void *addr,
-                                                 size_t length,
+typedef ucs_status_t (*uct_md_mem_advise_func_t)(uct_md_h md, uct_mem_h memh,
+                                                 void *addr, size_t length,
                                                  unsigned advice);
 
-typedef ucs_status_t
-(*uct_md_mem_reg_func_t)(uct_md_h md, void *address, size_t length,
-                         const uct_md_mem_reg_params_t *params,
-                         uct_mem_h *memh_p);
+typedef ucs_status_t (*uct_md_mem_reg_func_t)(
+    uct_md_h md, void *address, size_t length,
+    const uct_md_mem_reg_params_t *params, uct_mem_h *memh_p);
 
-typedef ucs_status_t
-(*uct_md_mem_dereg_func_t)(uct_md_h md,
-                           const uct_md_mem_dereg_params_t *param);
+typedef ucs_status_t (*uct_md_mem_dereg_func_t)(
+    uct_md_h md, const uct_md_mem_dereg_params_t *param);
 
 typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 const void *address,
@@ -107,60 +92,58 @@ typedef ucs_status_t (*uct_md_mem_query_func_t)(uct_md_h md,
                                                 uct_md_mem_attr_t *mem_attr);
 
 typedef ucs_status_t (*uct_md_mkey_pack_func_t)(
-        uct_md_h md, uct_mem_h memh, void *address, size_t length,
-        const uct_md_mkey_pack_params_t *params,
-        void *buffer);
+    uct_md_h md, uct_mem_h memh, void *address, size_t length,
+    const uct_md_mkey_pack_params_t *params, void *buffer);
 
-typedef ucs_status_t
-(*uct_md_mem_attach_func_t)(uct_md_h md, const void *mkey_buffer,
-                            uct_md_mem_attach_params_t *params,
-                            uct_mem_h *memh_p);
+typedef ucs_status_t (*uct_md_mem_attach_func_t)(
+    uct_md_h md, const void *mkey_buffer, uct_md_mem_attach_params_t *params,
+    uct_mem_h *memh_p);
 
-typedef int (*uct_md_is_sockaddr_accessible_func_t)(uct_md_h md,
-                                                    const ucs_sock_addr_t *sockaddr,
-                                                    uct_sockaddr_accessibility_t mode);
+typedef ucs_status_t (*uct_md_mem_attach_verbs_func_t)(
+    struct ibv_pd *pd, const void *mkey_buffer,
+    uct_md_mem_attach_params_t *params, struct ibv_mr **memh_p);
 
-typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(uct_md_h md,
-                                                         const void *addr,
-                                                         size_t length,
-                                                         ucs_memory_type_t *mem_type_p);
+typedef int (*uct_md_is_sockaddr_accessible_func_t)(
+    uct_md_h md, const ucs_sock_addr_t *sockaddr,
+    uct_sockaddr_accessibility_t mode);
 
+typedef ucs_status_t (*uct_md_detect_memory_type_func_t)(
+    uct_md_h md, const void *addr, size_t length,
+    ucs_memory_type_t *mem_type_p);
 
 /**
  * Memory domain operations
  */
 struct uct_md_ops {
-    uct_md_close_func_t                  close;
-    uct_md_query_func_t                  query;
-    uct_md_mem_alloc_func_t              mem_alloc;
-    uct_md_mem_free_func_t               mem_free;
-    uct_md_mem_advise_func_t             mem_advise;
-    uct_md_mem_reg_func_t                mem_reg;
-    uct_md_mem_dereg_func_t              mem_dereg;
-    uct_md_mem_query_func_t              mem_query;
-    uct_md_mkey_pack_func_t              mkey_pack;
-    uct_md_mem_attach_func_t             mem_attach;
-    uct_md_detect_memory_type_func_t     detect_memory_type;
+  uct_md_close_func_t close;
+  uct_md_query_func_t query;
+  uct_md_mem_alloc_func_t mem_alloc;
+  uct_md_mem_free_func_t mem_free;
+  uct_md_mem_advise_func_t mem_advise;
+  uct_md_mem_reg_func_t mem_reg;
+  uct_md_mem_dereg_func_t mem_dereg;
+  uct_md_mem_query_func_t mem_query;
+  uct_md_mkey_pack_func_t mkey_pack;
+  uct_md_mem_attach_func_t mem_attach;
+  uct_md_mem_attach_verbs_func_t mem_attach_verbs;
+  uct_md_detect_memory_type_func_t detect_memory_type;
 };
-
 
 /**
  * Memory domain
  */
 struct uct_md {
-    uct_md_ops_t           *ops;
-    uct_component_t        *component;
+  uct_md_ops_t *ops;
+  uct_component_t *component;
 };
 
-
-#define UCT_MD_DEFAULT_CONFIG_INITIALIZER \
-    { \
-        .name        = "Default memory domain", \
-        .prefix      =  "", \
-        .table       = uct_md_config_table, \
-        .size        = sizeof(uct_md_config_t), \
-    }
-
+#define UCT_MD_DEFAULT_CONFIG_INITIALIZER                                      \
+  {                                                                            \
+      .name = "Default memory domain",                                         \
+      .prefix = "",                                                            \
+      .table = uct_md_config_table,                                            \
+      .size = sizeof(uct_md_config_t),                                         \
+  }
 
 /*
  * Base implementation of query_md_resources(), which returns a single md
@@ -175,7 +158,6 @@ ucs_status_t
 uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
                                unsigned *num_resources_p);
 
-
 /**
  * @ingroup UCT_MD
  * @brief Allocate memory for zero-copy sends and remote access.
@@ -184,14 +166,15 @@ uct_md_query_empty_md_resource(uct_md_resource_desc_t **resources_p,
  * must support @ref UCT_MD_FLAG_ALLOC flag.
  *
  * @param [in]     md          Memory domain to allocate memory on.
- * @param [in,out] length_p    Points to the size of memory to allocate. Upon successful
- *                             return, filled with the actual size that was allocated,
- *                             which may be larger than the one requested. Must be >0.
+ * @param [in,out] length_p    Points to the size of memory to allocate. Upon
+ * successful return, filled with the actual size that was allocated, which may
+ * be larger than the one requested. Must be >0.
  * @param [in,out] address_p   The address
  * @param [in]     mem_type    Memory type of the allocation
- * @param [in]     flags       Memory allocation flags, see @ref uct_md_mem_flags.
- * @param [in]     name        Name of the allocated region, used to track memory
- *                             usage for debugging and profiling.
+ * @param [in]     flags       Memory allocation flags, see @ref
+ * uct_md_mem_flags.
+ * @param [in]     name        Name of the allocated region, used to track
+ * memory usage for debugging and profiling.
  * @param [out]    memh_p      Filled with handle for allocated region.
  */
 ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
@@ -203,10 +186,10 @@ ucs_status_t uct_md_mem_alloc(uct_md_h md, size_t *length_p, void **address_p,
  * @brief Release memory allocated by @ref uct_md_mem_alloc.
  *
  * @param [in]     md          Memory domain memory was allocated on.
- * @param [in]     memh        Memory handle, as returned from @ref uct_md_mem_alloc.
+ * @param [in]     memh        Memory handle, as returned from @ref
+ * uct_md_mem_alloc.
  */
 ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
-
 
 /**
  * @brief Dummy function
@@ -214,8 +197,8 @@ ucs_status_t uct_md_mem_free(uct_md_h md, uct_mem_h memh);
  *
  */
 ucs_status_t uct_md_stub_rkey_unpack(uct_component_t *component,
-                                     const void *rkey_buffer, uct_rkey_t *rkey_p,
-                                     void **handle_p);
+                                     const void *rkey_buffer,
+                                     uct_rkey_t *rkey_p, void **handle_p);
 
 ucs_status_t uct_base_rkey_compare(uct_component_t *component, uct_rkey_t rkey1,
                                    uct_rkey_t rkey2,
@@ -240,18 +223,16 @@ ucs_status_t uct_md_dummy_mem_dereg(uct_md_h uct_md,
 
 extern ucs_config_field_t uct_md_config_table[];
 
-static inline ucs_log_level_t uct_md_reg_log_lvl(uint64_t flags)
-{
-    return (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG :
-           UCS_LOG_LEVEL_ERROR;
+static inline ucs_log_level_t uct_md_reg_log_lvl(uint64_t flags) {
+  return (flags & UCT_MD_MEM_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DIAG
+                                               : UCS_LOG_LEVEL_ERROR;
 }
 
-static UCS_F_ALWAYS_INLINE ucs_log_level_t uct_md_attach_log_lvl(uint64_t flags)
-{
-    return (flags & UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG :
-                                                          UCS_LOG_LEVEL_ERROR;
+static UCS_F_ALWAYS_INLINE ucs_log_level_t
+uct_md_attach_log_lvl(uint64_t flags) {
+  return (flags & UCT_MD_MEM_ATTACH_FLAG_HIDE_ERRORS) ? UCS_LOG_LEVEL_DEBUG
+                                                      : UCS_LOG_LEVEL_ERROR;
 }
-
 
 void uct_md_vfs_init(uct_component_h component, uct_md_h md,
                      const char *md_name);

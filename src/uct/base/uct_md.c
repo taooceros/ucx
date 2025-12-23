@@ -326,7 +326,7 @@ ucs_status_t uct_md_mem_attach_verbs(uct_md_h fake_md, struct ibv_pd *md,
                                      const void *mkey_buffer,
                                      uct_md_mem_attach_params_t *params,
                                      struct ibv_mr **memh_p) {
-  return uct_ib_mlx5_devx_mem_attach_ibverbs(md, mkey_buffer, params, memh_p);
+  return fake_md->ops->mem_attach_verbs(md, mkey_buffer, params, memh_p);
 }
 
 ucs_status_t uct_rkey_unpack(uct_component_h component, const void *rkey_buffer,
